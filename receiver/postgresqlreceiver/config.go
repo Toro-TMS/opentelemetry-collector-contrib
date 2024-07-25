@@ -31,6 +31,7 @@ type Config struct {
 	scraperhelper.ControllerConfig `mapstructure:",squash"`
 	Username                       string                         `mapstructure:"username"`
 	Password                       configopaque.String            `mapstructure:"password"`
+	DatabaseURL                    configopaque.String            `mapstructure:"database_url"`
 	Databases                      []string                       `mapstructure:"databases"`
 	ExcludeDatabases               []string                       `mapstructure:"exclude_databases"`
 	confignet.AddrConfig           `mapstructure:",squash"`       // provides Endpoint and Transport
@@ -48,11 +49,14 @@ type ConnectionPool struct {
 
 func (cfg *Config) Validate() error {
 	var err error
-	if cfg.Username == "" {
-		err = multierr.Append(err, errors.New(ErrNoUsername))
-	}
-	if cfg.Password == "" {
-		err = multierr.Append(err, errors.New(ErrNoPassword))
+
+	if cfg.DatabaseURL == "" {
+		if cfg.Username == "" {
+			err = multierr.Append(err, errors.New(ErrNoUsername))
+		}
+		if cfg.Password == "" {
+			err = multierr.Append(err, errors.New(ErrNoPassword))
+		}
 	}
 
 	// The lib/pq module does not support overriding ServerName or specifying supported TLS versions

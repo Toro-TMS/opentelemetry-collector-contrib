@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"sync"
 	"time"
 
@@ -114,6 +115,15 @@ func (p *postgreSQLScraper) scrape(ctx context.Context) (pmetric.Metrics, error)
 		return pmetric.NewMetrics(), err
 	}
 	defer listClient.Close()
+
+	if p.config.DatabaseURL != "" {
+		u, parseErr := url.Parse(string(p.config.DatabaseURL))
+		if parseErr != nil {
+			p.logger.Error("Failed to parse database URL", zap.Error(parseErr))
+			return pmetric.NewMetrics(), parseErr
+		}
+		databases = append(databases, u.Path[1:])
+	}
 
 	if len(databases) == 0 {
 		dbList, dbErr := listClient.listDatabases(ctx)

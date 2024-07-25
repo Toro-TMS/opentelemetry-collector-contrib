@@ -71,6 +71,8 @@ type postgreSQLConfig struct {
 	database string
 	address  confignet.AddrConfig
 	tls      configtls.ClientConfig
+
+	databaseURL string
 }
 
 func sslConnectionString(tls configtls.ClientConfig) string {
@@ -102,6 +104,9 @@ func sslConnectionString(tls configtls.ClientConfig) string {
 }
 
 func (c postgreSQLConfig) ConnectionString() (string, error) {
+	if c.databaseURL != "" {
+		return c.databaseURL, nil
+	}
 	// postgres will assume the supplied user as the database name if none is provided,
 	// so we must specify a database name even when we are just collecting the list of databases.
 	database := defaultPostgreSQLDatabase
