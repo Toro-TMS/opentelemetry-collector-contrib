@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"sync"
 
+	// Allow sql use of pgx driver
 	"github.com/lib/pq"
 	"go.opentelemetry.io/collector/featuregate"
 	"go.uber.org/multierr"
@@ -37,10 +38,11 @@ type defaultClientFactory struct {
 func newDefaultClientFactory(cfg *Config) *defaultClientFactory {
 	return &defaultClientFactory{
 		baseConfig: postgreSQLConfig{
-			username: cfg.Username,
-			password: string(cfg.Password),
-			address:  cfg.AddrConfig,
-			tls:      cfg.ClientConfig,
+			username:    cfg.Username,
+			password:    string(cfg.Password),
+			databaseURL: string(cfg.DatabaseURL),
+			address:     cfg.AddrConfig,
+			tls:         cfg.ClientConfig,
 		},
 	}
 }
@@ -70,10 +72,11 @@ func newPoolClientFactory(cfg *Config) *poolClientFactory {
 	poolCfg := cfg.ConnectionPool
 	return &poolClientFactory{
 		baseConfig: postgreSQLConfig{
-			username: cfg.Username,
-			password: string(cfg.Password),
-			address:  cfg.AddrConfig,
-			tls:      cfg.ClientConfig,
+			username:    cfg.Username,
+			password:    string(cfg.Password),
+			databaseURL: string(cfg.DatabaseURL),
+			address:     cfg.AddrConfig,
+			tls:         cfg.ClientConfig,
 		},
 		poolConfig: &poolCfg,
 		pool:       make(map[string]*sql.DB),
