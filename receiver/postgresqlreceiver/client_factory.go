@@ -7,6 +7,8 @@ import (
 	"database/sql"
 	"sync"
 
+	// Allow sql use of pgx driver
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/lib/pq"
 	"go.opentelemetry.io/collector/featuregate"
 	"go.uber.org/multierr"
@@ -142,6 +144,9 @@ func (p *poolClientFactory) setPoolSettings(db *sql.DB) {
 func getDB(cfg postgreSQLConfig, database string) (*sql.DB, error) {
 	if database != "" {
 		cfg.database = database
+	}
+	if cfg.databaseURL != "" {
+		return sql.Open("pgx", cfg.databaseURL)
 	}
 	connectionString, err := cfg.ConnectionString()
 	if err != nil {

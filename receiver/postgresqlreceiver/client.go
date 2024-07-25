@@ -71,6 +71,8 @@ type postgreSQLConfig struct {
 	database string
 	address  confignet.AddrConfig
 	tls      configtls.ClientConfig
+
+	databaseURL string
 }
 
 func sslConnectionString(tls configtls.ClientConfig) string {
