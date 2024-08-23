@@ -39,13 +39,21 @@ all_set:
       enabled: true
     postgresql.rows:
       enabled: true
-    postgresql.sequential_scans:
+    postgresql.rows_fetched:
+      enabled: true
+    postgresql.rows_returned:
       enabled: true
     postgresql.table.count:
+      enabled: true
+    postgresql.table.index_scans:
+      enabled: true
+    postgresql.table.sequential_scans:
       enabled: true
     postgresql.table.size:
       enabled: true
     postgresql.table.vacuum.count:
+      enabled: true
+    postgresql.temp_bytes:
       enabled: true
     postgresql.temp_files:
       enabled: true
@@ -104,13 +112,21 @@ none_set:
       enabled: false
     postgresql.rows:
       enabled: false
-    postgresql.sequential_scans:
+    postgresql.rows_fetched:
+      enabled: false
+    postgresql.rows_returned:
       enabled: false
     postgresql.table.count:
+      enabled: false
+    postgresql.table.index_scans:
+      enabled: false
+    postgresql.table.sequential_scans:
       enabled: false
     postgresql.table.size:
       enabled: false
     postgresql.table.vacuum.count:
+      enabled: false
+    postgresql.temp_bytes:
       enabled: false
     postgresql.temp_files:
       enabled: false

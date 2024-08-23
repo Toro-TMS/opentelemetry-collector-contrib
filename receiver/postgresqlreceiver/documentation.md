@@ -198,6 +198,22 @@ Number of user tables in a database.
 | ---- | ----------- | ---------- | ----------------------- | --------- |
 | {table} | Sum | Int | Cumulative | false |
 
+### postgresql.table.index_scans
+
+The number of index scans on a table.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| {scans} | Sum | Int | Cumulative | true |
+
+### postgresql.table.sequential_scans
+
+The number of sequential scans on a table.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| {scans} | Sum | Int | Cumulative | true |
+
 ### postgresql.table.size
 
 Disk space used by a table.
@@ -277,13 +293,29 @@ The number of deadlocks.
 | ---- | ----------- | ---------- | ----------------------- | --------- |
 | {deadlock} | Sum | Int | Cumulative | true |
 
-### postgresql.sequential_scans
+### postgresql.rows_fetched
 
-The number of sequential scans.
+The number of rows fetched by queries to the database.
 
 | Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
 | ---- | ----------- | ---------- | ----------------------- | --------- |
-| {sequential_scan} | Sum | Int | Cumulative | true |
+| 1 | Sum | Int | Cumulative | true |
+
+### postgresql.rows_returned
+
+The number of rows returned by queries to the database.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| 1 | Sum | Int | Cumulative | true |
+
+### postgresql.temp_bytes
+
+The number of temp bytes allocated.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| By | Sum | Int | Cumulative | true |
 
 ### postgresql.temp_files
 

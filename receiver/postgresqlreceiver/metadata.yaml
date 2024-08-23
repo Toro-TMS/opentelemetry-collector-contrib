@@ -244,10 +244,18 @@ metrics:
       value_type: int
       monotonic: true
       aggregation_temporality: cumulative
-  postgresql.sequential_scans:
-    enabled: false
-    description: The number of sequential scans.
-    unit: "{sequential_scan}"
+  postgresql.table.index_scans:
+    enabled: true
+    description: The number of index scans on a table.
+    unit: "{scans}"
+    sum:
+      value_type: int
+      monotonic: true
+      aggregation_temporality: cumulative
+  postgresql.table.sequential_scans:
+    enabled: true
+    description: The number of sequential scans on a table.
+    unit: "{scans}"
     sum:
       value_type: int
       monotonic: true
@@ -283,7 +291,31 @@ metrics:
     sum:
       value_type: int
       monotonic: true
-      aggregation_temporality: cumulative   
+      aggregation_temporality: cumulative
+  postgresql.temp_bytes:
+    enabled: false
+    description: The number of temp bytes allocated.
+    unit: "By"
+    sum:
+      value_type: int
+      monotonic: true
+      aggregation_temporality: cumulative
+  postgresql.rows_fetched:
+    enabled: false
+    description: The number of rows fetched by queries to the database.
+    unit: "1"
+    sum:
+      value_type: int
+      monotonic: true
+      aggregation_temporality: cumulative
+  postgresql.rows_returned:
+    enabled: false
+    description: The number of rows returned by queries to the database.
+    unit: "1"
+    sum:
+      value_type: int
+      monotonic: true
+      aggregation_temporality: cumulative
   postgresql.wal.age:
     description: Age of the oldest WAL file.
     extended_documentation: |
