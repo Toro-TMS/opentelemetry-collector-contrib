@@ -60,8 +60,6 @@ attributes:
     description: The block read source type.
     type: string
     enum:
-      - blk_read
-      - blk_hit
       - heap_read
       - heap_hit
       - idx_read

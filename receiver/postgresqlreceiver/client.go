@@ -327,25 +327,21 @@ func (c *postgreSQLClient) getDatabaseTableMetrics(ctx context.Context, db strin
 }
 
 type tableIOStats struct {
-	database   string
-	schema     string
-	table      string
-	blocksRead int64
-	blocksHit  int64
-	heapRead   int64
-	heapHit    int64
-	idxRead    int64
-	idxHit     int64
-	toastRead  int64
-	toastHit   int64
-	tidxRead   int64
-	tidxHit    int64
+	database  string
+	schema    string
+	table     string
+	heapRead  int64
+	heapHit   int64
+	idxRead   int64
+	idxHit    int64
+	toastRead int64
+	toastHit  int64
+	tidxRead  int64
+	tidxHit   int64
 }
 
 func (c *postgreSQLClient) getBlocksReadByTable(ctx context.Context, db string) (map[tableIdentifier]tableIOStats, error) {
 	query := `SELECT schemaname as schema, relname AS table,
-	coalesce(blks_read, 0) AS blocks_read,
-	coalesce(blks_hit, 0) AS blocks_hit,
 	coalesce(heap_blks_read, 0) AS heap_read,
 	coalesce(heap_blks_hit, 0) AS heap_hit,
 	coalesce(idx_blks_read, 0) AS idx_read,
@@ -364,26 +360,24 @@ func (c *postgreSQLClient) getBlocksReadByTable(ctx context.Context, db string) 
 	}
 	for rows.Next() {
 		var schema, table string
-		var blocksRead, blocksHit, heapRead, heapHit, idxRead, idxHit, toastRead, toastHit, tidxRead, tidxHit int64
-		err = rows.Scan(&schema, &table, &blocksRead, &blocksHit, &heapRead, &heapHit, &idxRead, &idxHit, &toastRead, &toastHit, &tidxRead, &tidxHit)
+		var heapRead, heapHit, idxRead, idxHit, toastRead, toastHit, tidxRead, tidxHit int64
+		err = rows.Scan(&schema, &table, &heapRead, &heapHit, &idxRead, &idxHit, &toastRead, &toastHit, &tidxRead, &tidxHit)
 		if err != nil {
 			errors = multierr.Append(errors, err)
 			continue
 		}
 		tios[tableKey(db, schema, table)] = tableIOStats{
-			database:   db,
-			schema:     schema,
-			table:      table,
-			blocksRead: blocksRead,
-			blocksHit:  blocksHit,
-			heapRead:   heapRead,
-			heapHit:    heapHit,
-			idxRead:    idxRead,
-			idxHit:     idxHit,
-			toastRead:  toastRead,
-			toastHit:   toastHit,
-			tidxRead:   tidxRead,
-			tidxHit:    tidxHit,
+			database:  db,
+			schema:    schema,
+			table:     table,
+			heapRead:  heapRead,
+			heapHit:   heapHit,
+			idxRead:   idxRead,
+			idxHit:    idxHit,
+			toastRead: toastRead,
+			toastHit:  toastHit,
+			tidxRead:  tidxRead,
+			tidxHit:   tidxHit,
 		}
 	}
 	return tios, errors

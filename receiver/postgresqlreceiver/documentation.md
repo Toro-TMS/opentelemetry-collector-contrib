@@ -90,7 +90,7 @@ The number of blocks read.
 
 | Name | Description | Values |
 | ---- | ----------- | ------ |
-| source | The block read source type. | Str: ``blk_read``, ``blk_hit``, ``heap_read``, ``heap_hit``, ``idx_read``, ``idx_hit``, ``toast_read``, ``toast_hit``, ``tidx_read``, ``tidx_hit`` |
+| source | The block read source type. | Str: ``heap_read``, ``heap_hit``, ``idx_read``, ``idx_hit``, ``toast_read``, ``toast_hit``, ``tidx_read``, ``tidx_hit`` |
 
 ### postgresql.commits
 
