@@ -1217,23 +1217,23 @@ func newMetricPostgresqlRows(cfg MetricConfig) metricPostgresqlRows {
 	return m
 }
 
-type metricPostgresqlSequentialScans struct {
+type metricPostgresqlTableIndexScans struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	config   MetricConfig   // metric config provided by user.
 	capacity int            // max observed number of data points added to the metric.
 }
 
-// init fills postgresql.sequential_scans metric with initial data.
-func (m *metricPostgresqlSequentialScans) init() {
-	m.data.SetName("postgresql.sequential_scans")
-	m.data.SetDescription("The number of sequential scans.")
-	m.data.SetUnit("{sequential_scan}")
+// init fills postgresql.table.index_scans metric with initial data.
+func (m *metricPostgresqlTableIndexScans) init() {
+	m.data.SetName("postgresql.table.index_scans")
+	m.data.SetDescription("The number of index scans on a table.")
+	m.data.SetUnit("{index_scan}")
 	m.data.SetEmptySum()
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
 }
 
-func (m *metricPostgresqlSequentialScans) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
+func (m *metricPostgresqlTableIndexScans) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
 	if !m.config.Enabled {
 		return
 	}
@@ -1244,14 +1244,14 @@ func (m *metricPostgresqlSequentialScans) recordDataPoint(start pcommon.Timestam
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
-func (m *metricPostgresqlSequentialScans) updateCapacity() {
+func (m *metricPostgresqlTableIndexScans) updateCapacity() {
 	if m.data.Sum().DataPoints().Len() > m.capacity {
 		m.capacity = m.data.Sum().DataPoints().Len()
 	}
 }
 
 // emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
-func (m *metricPostgresqlSequentialScans) emit(metrics pmetric.MetricSlice) {
+func (m *metricPostgresqlTableIndexScans) emit(metrics pmetric.MetricSlice) {
 	if m.config.Enabled && m.data.Sum().DataPoints().Len() > 0 {
 		m.updateCapacity()
 		m.data.MoveTo(metrics.AppendEmpty())
@@ -1259,8 +1259,59 @@ func (m *metricPostgresqlSequentialScans) emit(metrics pmetric.MetricSlice) {
 	}
 }
 
-func newMetricPostgresqlSequentialScans(cfg MetricConfig) metricPostgresqlSequentialScans {
-	m := metricPostgresqlSequentialScans{config: cfg}
+func newMetricPostgresqlTableIndexScans(cfg MetricConfig) metricPostgresqlTableIndexScans {
+	m := metricPostgresqlTableIndexScans{config: cfg}
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
+type metricPostgresqlTableSequentialScans struct {
+	data     pmetric.Metric // data buffer for generated metric.
+	config   MetricConfig   // metric config provided by user.
+	capacity int            // max observed number of data points added to the metric.
+}
+
+// init fills postgresql.table.sequential_scans metric with initial data.
+func (m *metricPostgresqlTableSequentialScans) init() {
+	m.data.SetName("postgresql.table.sequential_scans")
+	m.data.SetDescription("The number of sequential scans on a table.")
+	m.data.SetUnit("{sequential_scan}")
+	m.data.SetEmptySum()
+	m.data.Sum().SetIsMonotonic(true)
+	m.data.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+}
+
+func (m *metricPostgresqlTableSequentialScans) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
+	if !m.config.Enabled {
+		return
+	}
+	dp := m.data.Sum().DataPoints().AppendEmpty()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	dp.SetIntValue(val)
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricPostgresqlTableSequentialScans) updateCapacity() {
+	if m.data.Sum().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Sum().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricPostgresqlTableSequentialScans) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Sum().DataPoints().Len() > 0 {
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricPostgresqlTableSequentialScans(cfg MetricConfig) metricPostgresqlTableSequentialScans {
+	m := metricPostgresqlTableSequentialScans{config: cfg}
 	if cfg.Enabled {
 		m.data = pmetric.NewMetric()
 		m.init()
@@ -1481,8 +1532,8 @@ type metricPostgresqlTempBytes struct {
 // init fills postgresql.temp_bytes metric with initial data.
 func (m *metricPostgresqlTempBytes) init() {
 	m.data.SetName("postgresql.temp_bytes")
-	m.data.SetDescription("The number of temp files.")
-	m.data.SetUnit("{temp_file}")
+	m.data.SetDescription("The number of temp bytes allocated.")
+	m.data.SetUnit("{temp_bytes}")
 	m.data.SetEmptySum()
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
@@ -1583,8 +1634,8 @@ type metricPostgresqlRowsReturned struct {
 // init fills postgresql.rows_returned metric with initial data.
 func (m *metricPostgresqlRowsReturned) init() {
 	m.data.SetName("postgresql.rows_returned")
-	m.data.SetDescription("The number of sequential scans.")
-	m.data.SetUnit("{sequential_scan}")
+	m.data.SetDescription("Rows fetched by queries to the database.")
+	m.data.SetUnit("{rows_returned}")
 	m.data.SetEmptySum()
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
@@ -1807,7 +1858,8 @@ type MetricsBuilder struct {
 	metricPostgresqlReplicationDataDelay     metricPostgresqlReplicationDataDelay
 	metricPostgresqlRollbacks                metricPostgresqlRollbacks
 	metricPostgresqlRows                     metricPostgresqlRows
-	metricPostgresqlSequentialScans          metricPostgresqlSequentialScans
+	metricPostgresqlTableIndexScans          metricPostgresqlTableIndexScans
+	metricPostgresqlTableSequentialScans     metricPostgresqlTableSequentialScans
 	metricPostgresqlTableCount               metricPostgresqlTableCount
 	metricPostgresqlTableSize                metricPostgresqlTableSize
 	metricPostgresqlTableVacuumCount         metricPostgresqlTableVacuumCount
@@ -1855,7 +1907,8 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.Settings, opt
 		metricPostgresqlReplicationDataDelay:     newMetricPostgresqlReplicationDataDelay(mbc.Metrics.PostgresqlReplicationDataDelay),
 		metricPostgresqlRollbacks:                newMetricPostgresqlRollbacks(mbc.Metrics.PostgresqlRollbacks),
 		metricPostgresqlRows:                     newMetricPostgresqlRows(mbc.Metrics.PostgresqlRows),
-		metricPostgresqlSequentialScans:          newMetricPostgresqlSequentialScans(mbc.Metrics.PostgresqlSequentialScans),
+		metricPostgresqlTableIndexScans:          newMetricPostgresqlTableIndexScans(mbc.Metrics.PostgresqlTableIndexScans),
+		metricPostgresqlTableSequentialScans:     newMetricPostgresqlTableSequentialScans(mbc.Metrics.PostgresqlTableSequentialScans),
 		metricPostgresqlTableCount:               newMetricPostgresqlTableCount(mbc.Metrics.PostgresqlTableCount),
 		metricPostgresqlTableSize:                newMetricPostgresqlTableSize(mbc.Metrics.PostgresqlTableSize),
 		metricPostgresqlTableVacuumCount:         newMetricPostgresqlTableVacuumCount(mbc.Metrics.PostgresqlTableVacuumCount),
@@ -1973,7 +2026,7 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricPostgresqlReplicationDataDelay.emit(ils.Metrics())
 	mb.metricPostgresqlRollbacks.emit(ils.Metrics())
 	mb.metricPostgresqlRows.emit(ils.Metrics())
-	mb.metricPostgresqlSequentialScans.emit(ils.Metrics())
+	mb.metricPostgresqlTableSequentialScans.emit(ils.Metrics())
 	mb.metricPostgresqlTableCount.emit(ils.Metrics())
 	mb.metricPostgresqlTableSize.emit(ils.Metrics())
 	mb.metricPostgresqlTableVacuumCount.emit(ils.Metrics())
@@ -2109,9 +2162,14 @@ func (mb *MetricsBuilder) RecordPostgresqlRowsDataPoint(ts pcommon.Timestamp, va
 	mb.metricPostgresqlRows.recordDataPoint(mb.startTime, ts, val, stateAttributeValue.String())
 }
 
-// RecordPostgresqlSequentialScansDataPoint adds a data point to postgresql.sequential_scans metric.
-func (mb *MetricsBuilder) RecordPostgresqlSequentialScansDataPoint(ts pcommon.Timestamp, val int64) {
-	mb.metricPostgresqlSequentialScans.recordDataPoint(mb.startTime, ts, val)
+// RecordPostgresqlTableIndexScansDataPoint adds a data point to postgresql.table.index_scans metric.
+func (mb *MetricsBuilder) RecordPostgresqlTableIndexScansDataPoint(ts pcommon.Timestamp, val int64) {
+	mb.metricPostgresqlTableIndexScans.recordDataPoint(mb.startTime, ts, val)
+}
+
+// RecordPostgresqlTableSequentialScansDataPoint adds a data point to postgresql.table.sequential_scans metric.
+func (mb *MetricsBuilder) RecordPostgresqlTableSequentialScansDataPoint(ts pcommon.Timestamp, val int64) {
+	mb.metricPostgresqlTableSequentialScans.recordDataPoint(mb.startTime, ts, val)
 }
 
 // RecordPostgresqlTableCountDataPoint adds a data point to postgresql.table.count metric.
