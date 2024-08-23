@@ -137,8 +137,8 @@ type AttributeSource int
 
 const (
 	_ AttributeSource = iota
-	AttributeSourceBlocksRead
-	AttributeSourceBlocksHit
+	AttributeSourceBlkRead
+	AttributeSourceBlkHit
 	AttributeSourceHeapRead
 	AttributeSourceHeapHit
 	AttributeSourceIdxRead
@@ -152,10 +152,10 @@ const (
 // String returns the string representation of the AttributeSource.
 func (av AttributeSource) String() string {
 	switch av {
-	case AttributeSourceBlocksRead:
-		return "blocks_read"
-	case AttributeSourceBlocksHit:
-		return "blocks_hit"
+	case AttributeSourceBlkRead:
+		return "blk_read"
+	case AttributeSourceBlkHit:
+		return "blk_hit"
 	case AttributeSourceHeapRead:
 		return "heap_read"
 	case AttributeSourceHeapHit:
@@ -178,16 +178,16 @@ func (av AttributeSource) String() string {
 
 // MapAttributeSource is a helper map of string to AttributeSource attribute value.
 var MapAttributeSource = map[string]AttributeSource{
-	"blocks_read": AttributeSourceBlocksRead,
-	"blocks_hit":  AttributeSourceBlocksHit,
-	"heap_read":   AttributeSourceHeapRead,
-	"heap_hit":    AttributeSourceHeapHit,
-	"idx_read":    AttributeSourceIdxRead,
-	"idx_hit":     AttributeSourceIdxHit,
-	"toast_read":  AttributeSourceToastRead,
-	"toast_hit":   AttributeSourceToastHit,
-	"tidx_read":   AttributeSourceTidxRead,
-	"tidx_hit":    AttributeSourceTidxHit,
+	"blk_read":   AttributeSourceBlkRead,
+	"blk_hit":    AttributeSourceBlkHit,
+	"heap_read":  AttributeSourceHeapRead,
+	"heap_hit":   AttributeSourceHeapHit,
+	"idx_read":   AttributeSourceIdxRead,
+	"idx_hit":    AttributeSourceIdxHit,
+	"toast_read": AttributeSourceToastRead,
+	"toast_hit":  AttributeSourceToastHit,
+	"tidx_read":  AttributeSourceTidxRead,
+	"tidx_hit":   AttributeSourceTidxHit,
 }
 
 // AttributeState specifies the a value state attribute.
