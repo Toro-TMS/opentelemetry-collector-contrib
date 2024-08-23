@@ -94,7 +94,7 @@ func TestMetricsBuilder(t *testing.T) {
 
 			defaultMetricsCount++
 			allMetricsCount++
-			mb.RecordPostgresqlBlocksReadDataPoint(ts, 1, AttributeSourceHeapRead)
+			mb.RecordPostgresqlBlocksReadDataPoint(ts, 1, AttributeSourceBlocksRead)
 
 			defaultMetricsCount++
 			allMetricsCount++
@@ -321,7 +321,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("source")
 					assert.True(t, ok)
-					assert.EqualValues(t, "heap_read", attrVal.Str())
+					assert.EqualValues(t, "blocks_read", attrVal.Str())
 				case "postgresql.commits":
 					assert.False(t, validatedMetrics["postgresql.commits"], "Found a duplicate in the metrics slice: postgresql.commits")
 					validatedMetrics["postgresql.commits"] = true

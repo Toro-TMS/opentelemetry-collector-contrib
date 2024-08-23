@@ -60,6 +60,8 @@ attributes:
     description: The block read source type.
     type: string
     enum:
+      - blocks_read
+      - blocks_hit
       - heap_read
       - heap_hit
       - idx_read
@@ -319,7 +321,7 @@ metrics:
   postgresql.wal.age:
     description: Age of the oldest WAL file.
     extended_documentation: |
-     This metric requires WAL to be enabled with at least one replica.
+      This metric requires WAL to be enabled with at least one replica.
     enabled: true
     unit: s
     gauge:
@@ -342,6 +344,6 @@ metrics:
       value_type: double
     extended_documentation: |
       This metric requires WAL to be enabled with at least one replica.
-  
+
 tests:
   config:

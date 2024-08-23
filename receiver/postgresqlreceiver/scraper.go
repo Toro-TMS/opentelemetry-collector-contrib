@@ -247,6 +247,8 @@ func (p *postgreSQLScraper) collectTables(ctx context.Context, now pcommon.Times
 
 		br, ok := blockReads[tableKey]
 		if ok {
+			p.mb.RecordPostgresqlBlocksReadDataPoint(now, br.blocksRead, metadata.AttributeSourceBlocksRead)
+			p.mb.RecordPostgresqlBlocksReadDataPoint(now, br.blocksHit, metadata.AttributeSourceBlocksHit)
 			p.mb.RecordPostgresqlBlocksReadDataPoint(now, br.heapRead, metadata.AttributeSourceHeapRead)
 			p.mb.RecordPostgresqlBlocksReadDataPoint(now, br.heapHit, metadata.AttributeSourceHeapHit)
 			p.mb.RecordPostgresqlBlocksReadDataPoint(now, br.idxRead, metadata.AttributeSourceIdxRead)
