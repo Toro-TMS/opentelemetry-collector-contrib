@@ -1472,6 +1472,57 @@ func newMetricPostgresqlTempFiles(cfg MetricConfig) metricPostgresqlTempFiles {
 	return m
 }
 
+type metricPostgresqlTempBytes struct {
+	data     pmetric.Metric // data buffer for generated metric.
+	config   MetricConfig   // metric config provided by user.
+	capacity int            // max observed number of data points added to the metric.
+}
+
+// init fills postgresql.temp_bytes metric with initial data.
+func (m *metricPostgresqlTempBytes) init() {
+	m.data.SetName("postgresql.temp_bytes")
+	m.data.SetDescription("The number of temp files.")
+	m.data.SetUnit("{temp_file}")
+	m.data.SetEmptySum()
+	m.data.Sum().SetIsMonotonic(true)
+	m.data.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+}
+
+func (m *metricPostgresqlTempBytes) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
+	if !m.config.Enabled {
+		return
+	}
+	dp := m.data.Sum().DataPoints().AppendEmpty()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	dp.SetIntValue(val)
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricPostgresqlTempBytes) updateCapacity() {
+	if m.data.Sum().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Sum().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricPostgresqlTempBytes) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Sum().DataPoints().Len() > 0 {
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricPostgresqlTempBytes(cfg MetricConfig) metricPostgresqlTempBytes {
+	m := metricPostgresqlTempBytes{config: cfg}
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
 type metricPostgresqlRowsFetched struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	config   MetricConfig   // metric config provided by user.
@@ -1761,6 +1812,7 @@ type MetricsBuilder struct {
 	metricPostgresqlTableSize                metricPostgresqlTableSize
 	metricPostgresqlTableVacuumCount         metricPostgresqlTableVacuumCount
 	metricPostgresqlTempFiles                metricPostgresqlTempFiles
+	metricPostgresqlTempBytes                metricPostgresqlTempBytes
 	metricPostgresqlRowsFetched              metricPostgresqlRowsFetched
 	metricPostgresqlRowsReturned             metricPostgresqlRowsReturned
 	metricPostgresqlWalAge                   metricPostgresqlWalAge
@@ -1808,6 +1860,7 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.Settings, opt
 		metricPostgresqlTableSize:                newMetricPostgresqlTableSize(mbc.Metrics.PostgresqlTableSize),
 		metricPostgresqlTableVacuumCount:         newMetricPostgresqlTableVacuumCount(mbc.Metrics.PostgresqlTableVacuumCount),
 		metricPostgresqlTempFiles:                newMetricPostgresqlTempFiles(mbc.Metrics.PostgresqlTempFiles),
+		metricPostgresqlTempBytes:                newMetricPostgresqlTempBytes(mbc.Metrics.PostgresqlTempBytes),
 		metricPostgresqlRowsFetched:              newMetricPostgresqlRowsFetched(mbc.Metrics.PostgresqlRowsFetched),
 		metricPostgresqlRowsReturned:             newMetricPostgresqlRowsReturned(mbc.Metrics.PostgresqlRowsReturned),
 		metricPostgresqlWalAge:                   newMetricPostgresqlWalAge(mbc.Metrics.PostgresqlWalAge),
@@ -2079,6 +2132,11 @@ func (mb *MetricsBuilder) RecordPostgresqlTableVacuumCountDataPoint(ts pcommon.T
 // RecordPostgresqlTempFilesDataPoint adds a data point to postgresql.temp_files metric.
 func (mb *MetricsBuilder) RecordPostgresqlTempFilesDataPoint(ts pcommon.Timestamp, val int64) {
 	mb.metricPostgresqlTempFiles.recordDataPoint(mb.startTime, ts, val)
+}
+
+// RecordPostgresqlTempBytesDataPoint adds a data point to postgresql.temp_bytes metric.
+func (mb *MetricsBuilder) RecordPostgresqlTempBytesDataPoint(ts pcommon.Timestamp, val int64) {
+	mb.metricPostgresqlTempBytes.recordDataPoint(mb.startTime, ts, val)
 }
 
 // RecordPostgresqlRowsFetchedDataPoint adds a data point to postgresql.rows_fetched metric.
