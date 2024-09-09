@@ -565,6 +565,12 @@ func Test_e2e_converters(t *testing.T) {
 			},
 		},
 		{
+			statement: `set(attributes["test"], ParseBytes("1KB"))`,
+			want: func(tCtx ottllog.TransformContext) {
+				tCtx.GetLogRecord().Attributes().PutInt("test", 1000)
+			},
+		},
+		{
 			statement: `set(attributes["test"], ParseJSON("{\"id\":1}"))`,
 			want: func(tCtx ottllog.TransformContext) {
 				m := tCtx.GetLogRecord().Attributes().PutEmptyMap("test")
