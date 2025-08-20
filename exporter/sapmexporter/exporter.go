@@ -8,7 +8,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jaegertracing/jaeger/model"
+	"github.com/jaegertracing/jaeger-idl/model/v1"
 	sapmclient "github.com/signalfx/sapm-proto/client"
 	"go.opentelemetry.io/collector/client"
 	"go.opentelemetry.io/collector/component"
@@ -61,7 +61,7 @@ func newSAPMTracesExporter(cfg *Config, set exporter.Settings) (exporter.Traces,
 		return nil, err
 	}
 
-	te, err := exporterhelper.NewTracesExporter(
+	te, err := exporterhelper.NewTraces(
 		context.TODO(),
 		set,
 		cfg,

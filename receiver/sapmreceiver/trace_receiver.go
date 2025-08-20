@@ -23,7 +23,6 @@ import (
 	"go.opentelemetry.io/collector/receiver/receiverhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/errorutil"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/splunk"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/jaeger"
 )
 
@@ -66,17 +65,6 @@ func (sr *sapmReceiver) handleRequest(req *http.Request) error {
 		return err
 	}
 
-	if sr.config.AccessTokenPassthrough {
-		if accessToken := req.Header.Get(splunk.SFxAccessTokenHeader); accessToken != "" {
-			rSpans := td.ResourceSpans()
-			for i := 0; i < rSpans.Len(); i++ {
-				rSpan := rSpans.At(i)
-				attrs := rSpan.Resource().Attributes()
-				attrs.PutStr(splunk.SFxAccessTokenLabel, accessToken)
-			}
-		}
-	}
-
 	// pass the trace data to the next consumer
 	err = sr.nextConsumer.ConsumeTraces(ctx, td)
 	if err != nil {
@@ -104,7 +92,7 @@ func (sr *sapmReceiver) HTTPHandlerFunc(rw http.ResponseWriter, req *http.Reques
 	// more than an empty struct, then the sapm.PostSpansResponse{} struct will need to be marshaled
 	// and on error a http.StatusInternalServerError should be written to the http.ResponseWriter and
 	// this function should immediately return.
-	var respBytes = sr.defaultResponse
+	respBytes := sr.defaultResponse
 	rw.Header().Set(sapmprotocol.ContentTypeHeaderName, sapmprotocol.ContentTypeHeaderValue)
 
 	// write the response if client does not accept gzip encoding
@@ -157,7 +145,7 @@ func (sr *sapmReceiver) Start(ctx context.Context, host component.Host) error {
 		return nil
 	}
 	// set up the listener
-	ln, err := sr.config.ServerConfig.ToListener(ctx)
+	ln, err := sr.config.ToListener(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to bind to address %s: %w", sr.config.Endpoint, err)
 	}
@@ -167,7 +155,7 @@ func (sr *sapmReceiver) Start(ctx context.Context, host component.Host) error {
 	nr.HandleFunc(sapmprotocol.TraceEndpointV2, sr.HTTPHandlerFunc)
 
 	// create a server with the handler
-	sr.server, err = sr.config.ServerConfig.ToServer(ctx, host, sr.settings, nr)
+	sr.server, err = sr.config.ToServer(ctx, host, sr.settings, nr)
 	if err != nil {
 		return err
 	}
@@ -183,7 +171,7 @@ func (sr *sapmReceiver) Start(ctx context.Context, host component.Host) error {
 	return nil
 }
 
-// Shutdown stops the the sapmReceiver's server.
+// Shutdown stops the sapmReceiver's server.
 func (sr *sapmReceiver) Shutdown(context.Context) error {
 	if sr.server == nil {
 		return nil
@@ -209,16 +197,8 @@ func newReceiver(
 		return nil, fmt.Errorf("failed to marshal default response body for %v receiver: %w", params.ID, err)
 	}
 
-	if config.AccessTokenPassthrough {
-		params.Logger.Warn(
-			"access_token_passthrough is deprecated. " +
-				"Please enable include_metadata in the receiver and add " +
-				"`metadata_keys: [X-Sf-Token]` to the batch processor",
-		)
-	}
-
 	transport := "http"
-	if config.TLSSetting != nil {
+	if config.TLS.HasValue() {
 		transport = "https"
 	}
 	obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{

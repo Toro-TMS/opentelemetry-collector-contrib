@@ -20,8 +20,8 @@ type latency struct {
 
 var _ PolicyEvaluator = (*latency)(nil)
 
-// NewLatency creates a policy evaluator sampling traces with a duration higher than a configured threshold
-func NewLatency(settings component.TelemetrySettings, thresholdMs int64, upperThresholdMs int64) PolicyEvaluator {
+// NewLatency creates a policy evaluator sampling traces with a duration greater than a configured threshold
+func NewLatency(settings component.TelemetrySettings, thresholdMs, upperThresholdMs int64) PolicyEvaluator {
 	return &latency{
 		logger:           settings.Logger,
 		thresholdMs:      thresholdMs,

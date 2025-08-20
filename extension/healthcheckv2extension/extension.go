@@ -34,9 +34,11 @@ type healthCheckExtension struct {
 	host          component.Host
 }
 
-var _ component.Component = (*healthCheckExtension)(nil)
-var _ extensioncapabilities.ConfigWatcher = (*healthCheckExtension)(nil)
-var _ extensioncapabilities.PipelineWatcher = (*healthCheckExtension)(nil)
+var (
+	_ component.Component                   = (*healthCheckExtension)(nil)
+	_ extensioncapabilities.ConfigWatcher   = (*healthCheckExtension)(nil)
+	_ extensioncapabilities.PipelineWatcher = (*healthCheckExtension)(nil)
+)
 
 func newExtension(
 	ctx context.Context,
@@ -161,7 +163,7 @@ func (hc *healthCheckExtension) Ready() error {
 }
 
 // NotReady implements the extension.PipelineWatcher interface.
-func (hc *healthCheckExtension) NotReady() error {
+func (*healthCheckExtension) NotReady() error {
 	return nil
 }
 

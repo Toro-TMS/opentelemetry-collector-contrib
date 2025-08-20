@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sys/windows"
 
@@ -23,23 +25,27 @@ import (
 // Input is an operator that creates entries using the windows event log api.
 type Input struct {
 	helper.InputOperator
-	bookmark            Bookmark
-	buffer              Buffer
-	channel             string
-	maxReads            int
-	startAt             string
-	raw                 bool
-	excludeProviders    map[string]struct{}
-	pollInterval        time.Duration
-	persister           operator.Persister
-	publisherCache      publisherCache
-	cancel              context.CancelFunc
-	wg                  sync.WaitGroup
-	subscription        Subscription
-	remote              RemoteConfig
-	remoteSessionHandle windows.Handle
-	startRemoteSession  func() error
-	processEvent        func(context.Context, Event)
+	bookmark                 Bookmark
+	buffer                   *Buffer
+	channel                  string
+	ignoreChannelErrors      bool
+	query                    *string
+	maxReads                 int
+	currentMaxReads          int
+	startAt                  string
+	raw                      bool
+	includeLogRecordOriginal bool
+	excludeProviders         map[string]struct{}
+	pollInterval             time.Duration
+	persister                operator.Persister
+	publisherCache           publisherCache
+	cancel                   context.CancelFunc
+	wg                       sync.WaitGroup
+	subscription             Subscription
+	remote                   RemoteConfig
+	remoteSessionHandle      windows.Handle
+	startRemoteSession       func() error
+	processEvent             func(context.Context, Event) error
 }
 
 // newInput creates a new Input operator.
@@ -68,6 +74,9 @@ func (i *Input) defaultStartRemoteSession() error {
 		Server:   windows.StringToUTF16Ptr(i.remote.Server),
 		User:     windows.StringToUTF16Ptr(i.remote.Username),
 		Password: windows.StringToUTF16Ptr(i.remote.Password),
+	}
+	if i.remote.Domain != "" {
+		login.Domain = windows.StringToUTF16Ptr(i.remote.Domain)
 	}
 
 	sessionHandle, err := evtOpenSession(EvtRPCLoginClass, &login, 0, 0)
@@ -115,7 +124,7 @@ func (i *Input) Start(persister operator.Persister) error {
 	i.bookmark = NewBookmark()
 	offsetXML, err := i.getBookmarkOffset(ctx)
 	if err != nil {
-		_ = i.persister.Delete(ctx, i.channel)
+		_ = i.persister.Delete(ctx, i.getPersistKey())
 	}
 
 	if offsetXML != "" {
@@ -126,50 +135,67 @@ func (i *Input) Start(persister operator.Persister) error {
 
 	i.publisherCache = newPublisherCache()
 
+	subscriptionError := false
 	subscription := NewLocalSubscription()
 	if i.isRemote() {
 		subscription = NewRemoteSubscription(i.remote.Server)
 	}
 
-	if err := subscription.Open(i.startAt, uintptr(i.remoteSessionHandle), i.channel, i.bookmark); err != nil {
+	if err := subscription.Open(i.startAt, uintptr(i.remoteSessionHandle), i.channel, i.query, i.bookmark); err != nil {
+		var errorString string
 		if isNonTransientError(err) {
 			if i.isRemote() {
-				return fmt.Errorf("failed to open subscription for remote server %s: %w", i.remote.Server, err)
+				errorString = fmt.Sprintf("failed to open subscription for remote server: %s", i.remote.Server)
+			} else {
+				errorString = "failed to open local subscription"
 			}
-			return fmt.Errorf("failed to open local subscription: %w", err)
-		}
-		if i.isRemote() {
-			i.Logger().Warn("Transient error opening subscription for remote server, continuing", zap.String("server", i.remote.Server), zap.Error(err))
+			if !i.ignoreChannelErrors {
+				return fmt.Errorf("%s, error: %w", errorString, err)
+			}
+			subscriptionError = true
+			i.Logger().Warn(errorString, zap.Error(err))
 		} else {
-			i.Logger().Warn("Transient error opening local subscription, continuing", zap.Error(err))
+			if i.isRemote() {
+				i.Logger().Warn("Transient error opening subscription for remote server, continuing", zap.String("server", i.remote.Server), zap.Error(err))
+			} else {
+				i.Logger().Warn("Transient error opening local subscription, continuing", zap.Error(err))
+			}
 		}
 	}
 
-	i.subscription = subscription
-	i.wg.Add(1)
-	go i.readOnInterval(ctx)
+	if !subscriptionError {
+		i.subscription = subscription
+		i.wg.Add(1)
+		go i.readOnInterval(ctx)
+	}
 
 	return nil
 }
 
 // Stop will stop reading events from a subscription.
 func (i *Input) Stop() error {
-	i.cancel()
+	// Warning: all calls made below must be safe to be done even if Start() was not called or failed.
+
+	if i.cancel != nil {
+		i.cancel()
+	}
+
 	i.wg.Wait()
 
+	var errs error
 	if err := i.subscription.Close(); err != nil {
-		return fmt.Errorf("failed to close subscription: %w", err)
+		errs = multierr.Append(errs, fmt.Errorf("failed to close subscription: %w", err))
 	}
 
 	if err := i.bookmark.Close(); err != nil {
-		return fmt.Errorf("failed to close bookmark: %w", err)
+		errs = multierr.Append(errs, fmt.Errorf("failed to close bookmark: %w", err))
 	}
 
 	if err := i.publisherCache.evictAll(); err != nil {
-		return fmt.Errorf("failed to close publishers: %w", err)
+		errs = multierr.Append(errs, fmt.Errorf("failed to close publishers: %w", err))
 	}
 
-	return i.stopRemoteSession()
+	return multierr.Append(errs, i.stopRemoteSession())
 }
 
 // readOnInterval will read events with respect to the polling interval until it reaches the end of the channel.
@@ -191,7 +217,14 @@ func (i *Input) readOnInterval(ctx context.Context) {
 
 // read will read events from the subscription.
 func (i *Input) read(ctx context.Context) {
-	events, err := i.subscription.Read(i.maxReads)
+	events, actualMaxReads, err := i.subscription.Read(i.currentMaxReads)
+
+	// Update the current max reads if it changed
+	if err == nil && actualMaxReads < i.currentMaxReads {
+		i.currentMaxReads = actualMaxReads
+		i.Logger().Debug("Encountered RPC_S_INVALID_BOUND, reduced batch size", zap.Int("current_batch_size", i.currentMaxReads), zap.Int("original_batch_size", i.maxReads))
+	}
+
 	if err != nil {
 		i.Logger().Error("Failed to read events from subscription", zap.Error(err))
 		if i.isRemote() && (errors.Is(err, windows.ERROR_INVALID_HANDLE) || errors.Is(err, errSubscriptionHandleNotOpen)) {
@@ -210,7 +243,7 @@ func (i *Input) read(ctx context.Context) {
 				i.Logger().Error("Failed to re-establish remote session", zap.String("server", i.remote.Server), zap.Error(err))
 				return
 			}
-			if err := i.subscription.Open(i.startAt, uintptr(i.remoteSessionHandle), i.channel, i.bookmark); err != nil {
+			if err := i.subscription.Open(i.startAt, uintptr(i.remoteSessionHandle), i.channel, i.query, i.bookmark); err != nil {
 				i.Logger().Error("Failed to re-open subscription for remote server", zap.String("server", i.remote.Server), zap.Error(err))
 				return
 			}
@@ -219,9 +252,14 @@ func (i *Input) read(ctx context.Context) {
 	}
 
 	for n, event := range events {
-		i.processEvent(ctx, event)
+		if err := i.processEvent(ctx, event); err != nil {
+			i.Logger().Error("process event", zap.Error(err))
+		}
 		if len(events) == n+1 {
 			i.updateBookmarkOffset(ctx, event)
+			if err := i.subscription.bookmark.Update(event); err != nil {
+				i.Logger().Error("Failed to update bookmark from event", zap.Error(err))
+			}
 		}
 		event.Close()
 	}
@@ -240,61 +278,58 @@ func (i *Input) getPublisherName(event Event) (name string, excluded bool) {
 	return providerName, false
 }
 
-func (i *Input) renderSimpleAndSend(ctx context.Context, event Event) {
+func (i *Input) renderSimpleAndSend(ctx context.Context, event Event) error {
 	simpleEvent, err := event.RenderSimple(i.buffer)
 	if err != nil {
-		i.Logger().Error("Failed to render simple event", zap.Error(err))
-		return
+		return fmt.Errorf("render simple event: %w", err)
 	}
-	i.sendEvent(ctx, simpleEvent)
+	return i.sendEvent(ctx, simpleEvent)
 }
 
-func (i *Input) renderDeepAndSend(ctx context.Context, event Event, publisher Publisher) {
+func (i *Input) renderDeepAndSend(ctx context.Context, event Event, publisher Publisher) error {
 	deepEvent, err := event.RenderDeep(i.buffer, publisher)
 	if err == nil {
-		i.sendEvent(ctx, deepEvent)
-		return
+		return i.sendEvent(ctx, deepEvent)
 	}
-	i.Logger().Error("Failed to render formatted event", zap.Error(err))
-	i.renderSimpleAndSend(ctx, event)
+	return multierr.Append(
+		fmt.Errorf("render deep event: %w", err),
+		i.renderSimpleAndSend(ctx, event),
+	)
 }
 
 // processEvent will process and send an event retrieved from windows event log.
-func (i *Input) processEventWithoutRenderingInfo(ctx context.Context, event Event) {
+func (i *Input) processEventWithoutRenderingInfo(ctx context.Context, event Event) error {
 	if len(i.excludeProviders) == 0 {
-		i.renderSimpleAndSend(ctx, event)
-		return
+		return i.renderSimpleAndSend(ctx, event)
 	}
 	if _, exclude := i.getPublisherName(event); exclude {
-		return
+		return nil
 	}
-	i.renderSimpleAndSend(ctx, event)
+	return i.renderSimpleAndSend(ctx, event)
 }
 
-func (i *Input) processEventWithRenderingInfo(ctx context.Context, event Event) {
+func (i *Input) processEventWithRenderingInfo(ctx context.Context, event Event) error {
 	providerName, exclude := i.getPublisherName(event)
 	if exclude {
-		return
+		return nil
 	}
 
 	publisher, err := i.publisherCache.get(providerName)
 	if err != nil {
-		i.Logger().Warn(
-			"Failed to open event source, respective log entries cannot be formatted",
-			zap.String("provider", providerName), zap.Error(err))
-		i.renderSimpleAndSend(ctx, event)
-		return
+		return multierr.Append(
+			fmt.Errorf("open event source for provider %q: %w", providerName, err),
+			i.renderSimpleAndSend(ctx, event),
+		)
 	}
 
 	if publisher.Valid() {
-		i.renderDeepAndSend(ctx, event, publisher)
-		return
+		return i.renderDeepAndSend(ctx, event, publisher)
 	}
-	i.renderSimpleAndSend(ctx, event)
+	return i.renderSimpleAndSend(ctx, event)
 }
 
 // sendEvent will send EventXML as an entry to the operator's output.
-func (i *Input) sendEvent(ctx context.Context, eventXML *EventXML) {
+func (i *Input) sendEvent(ctx context.Context, eventXML *EventXML) error {
 	var body any = eventXML.Original
 	if !i.raw {
 		body = formattedBody(eventXML)
@@ -302,23 +337,26 @@ func (i *Input) sendEvent(ctx context.Context, eventXML *EventXML) {
 
 	e, err := i.NewEntry(body)
 	if err != nil {
-		i.Logger().Error("Failed to create entry", zap.Error(err))
-		return
+		return fmt.Errorf("create entry: %w", err)
 	}
 
 	e.Timestamp = parseTimestamp(eventXML.TimeCreated.SystemTime)
 	e.Severity = parseSeverity(eventXML.RenderedLevel, eventXML.Level)
 
 	if i.remote.Server != "" {
-		e.Attributes["server.address"] = i.remote.Server
+		e.AddAttribute("server.address", i.remote.Server)
 	}
 
-	_ = i.Write(ctx, e)
+	if i.includeLogRecordOriginal {
+		e.AddAttribute(string(semconv.LogRecordOriginalKey), eventXML.Original)
+	}
+
+	return i.Write(ctx, e)
 }
 
 // getBookmarkXML will get the bookmark xml from the offsets database.
 func (i *Input) getBookmarkOffset(ctx context.Context) (string, error) {
-	bytes, err := i.persister.Get(ctx, i.channel)
+	bytes, err := i.persister.Get(ctx, i.getPersistKey())
 	return string(bytes), err
 }
 
@@ -335,8 +373,16 @@ func (i *Input) updateBookmarkOffset(ctx context.Context, event Event) {
 		return
 	}
 
-	if err := i.persister.Set(ctx, i.channel, []byte(bookmarkXML)); err != nil {
+	if err := i.persister.Set(ctx, i.getPersistKey(), []byte(bookmarkXML)); err != nil {
 		i.Logger().Error("failed to set offsets", zap.Error(err))
 		return
 	}
+}
+
+func (i *Input) getPersistKey() string {
+	if i.query != nil {
+		return *i.query
+	}
+
+	return i.channel
 }

@@ -25,7 +25,7 @@ func newCarbonExporter(ctx context.Context, cfg *Config, set exporter.Settings) 
 		conns:        newConnPool(cfg.TCPAddrConfig, cfg.TimeoutSettings.Timeout, cfg.MaxIdleConns),
 	}
 
-	exp, err := exporterhelper.NewMetricsExporter(
+	exp, err := exporterhelper.NewMetrics(
 		ctx,
 		set,
 		cfg,
@@ -131,11 +131,11 @@ func (cp *nopConnPool) get() (net.Conn, error) {
 	return createTCPConn(cp.tcpConfig, cp.timeout)
 }
 
-func (cp *nopConnPool) put(conn net.Conn) {
+func (*nopConnPool) put(conn net.Conn) {
 	_ = conn.Close()
 }
 
-func (cp *nopConnPool) close() error {
+func (*nopConnPool) close() error {
 	return nil
 }
 

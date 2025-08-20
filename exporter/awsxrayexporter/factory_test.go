@@ -4,7 +4,6 @@
 package awsxrayexporter
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -69,7 +68,7 @@ func TestCreateDefaultConfigWithSkipTimestampValidation(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestCreateTracesExporter(t *testing.T) {
+func TestCreateTraces(t *testing.T) {
 	cm, err := confmaptest.LoadConf(filepath.Join("testdata", "config.yaml"))
 	require.NoError(t, err)
 	factory := NewFactory()
@@ -79,13 +78,13 @@ func TestCreateTracesExporter(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, sub.Unmarshal(cfg))
 
-	ctx := context.Background()
-	exporter, err := factory.CreateTracesExporter(ctx, exportertest.NewNopSettings(), cfg)
+	ctx := t.Context()
+	exporter, err := factory.CreateTraces(ctx, exportertest.NewNopSettings(metadata.Type), cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, exporter)
 }
 
-func TestCreateMetricsExporter(t *testing.T) {
+func TestCreateMetrics(t *testing.T) {
 	cm, err := confmaptest.LoadConf(filepath.Join("testdata", "config.yaml"))
 	require.NoError(t, err)
 	factory := NewFactory()
@@ -95,8 +94,8 @@ func TestCreateMetricsExporter(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, sub.Unmarshal(cfg))
 
-	ctx := context.Background()
-	exporter, err := factory.CreateMetricsExporter(ctx, exportertest.NewNopSettings(), cfg)
+	ctx := t.Context()
+	exporter, err := factory.CreateMetrics(ctx, exportertest.NewNopSettings(metadata.Type), cfg)
 	assert.Error(t, err)
 	assert.Nil(t, exporter)
 }

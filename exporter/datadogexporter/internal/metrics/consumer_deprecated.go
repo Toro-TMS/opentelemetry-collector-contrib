@@ -14,9 +14,11 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metrics/sketches"
 )
 
-var _ metrics.Consumer = (*ZorkianConsumer)(nil)
-var _ metrics.HostConsumer = (*ZorkianConsumer)(nil)
-var _ metrics.TagsConsumer = (*ZorkianConsumer)(nil)
+var (
+	_ metrics.Consumer     = (*ZorkianConsumer)(nil)
+	_ metrics.HostConsumer = (*ZorkianConsumer)(nil)
+	_ metrics.TagsConsumer = (*ZorkianConsumer)(nil)
+)
 
 // ZorkianConsumer implements metrics.Consumer. It records consumed metrics, sketches and
 // APM stats payloads. It provides them to the caller using the All method.
@@ -36,7 +38,7 @@ func NewZorkianConsumer() *ZorkianConsumer {
 }
 
 // toDataType maps translator datatypes to Zorkian's datatypes.
-func (c *ZorkianConsumer) toDataType(dt metrics.DataType) (out MetricType) {
+func (*ZorkianConsumer) toDataType(dt metrics.DataType) (out MetricType) {
 	out = MetricType("unknown")
 
 	switch dt {

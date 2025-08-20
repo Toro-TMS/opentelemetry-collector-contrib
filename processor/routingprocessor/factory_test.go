@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configgrpc"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/exporter/otlpexporter"
@@ -21,6 +22,8 @@ import (
 	"go.opentelemetry.io/collector/pipeline"
 	"go.opentelemetry.io/collector/processor/processorhelper"
 	"go.opentelemetry.io/collector/processor/processortest"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/routingprocessor/internal/metadata"
 )
 
 var noopTelemetrySettings = componenttest.NewNopTelemetrySettings()
@@ -28,7 +31,7 @@ var noopTelemetrySettings = componenttest.NewNopTelemetrySettings()
 func TestProcessorGetsCreatedWithValidConfiguration(t *testing.T) {
 	// prepare
 	factory := NewFactory()
-	creationParams := processortest.NewNopSettings()
+	creationParams := processortest.NewNopSettings(metadata.Type)
 	cfg := &Config{
 		DefaultExporters: []string{"otlp"},
 		FromAttribute:    "X-Tenant",
@@ -41,21 +44,21 @@ func TestProcessorGetsCreatedWithValidConfiguration(t *testing.T) {
 	}
 
 	t.Run("traces", func(t *testing.T) {
-		exp, err := factory.CreateTraces(context.Background(), creationParams, cfg, consumertest.NewNop())
+		exp, err := factory.CreateTraces(t.Context(), creationParams, cfg, consumertest.NewNop())
 		// verify
 		assert.NoError(t, err)
 		assert.NotNil(t, exp)
 	})
 
 	t.Run("metrics", func(t *testing.T) {
-		exp, err := factory.CreateMetrics(context.Background(), creationParams, cfg, consumertest.NewNop())
+		exp, err := factory.CreateMetrics(t.Context(), creationParams, cfg, consumertest.NewNop())
 		// verify
 		assert.NoError(t, err)
 		assert.NotNil(t, exp)
 	})
 
 	t.Run("logs", func(t *testing.T) {
-		exp, err := factory.CreateLogs(context.Background(), creationParams, cfg, consumertest.NewNop())
+		exp, err := factory.CreateLogs(t.Context(), creationParams, cfg, consumertest.NewNop())
 		// verify
 		assert.NoError(t, err)
 		assert.NotNil(t, exp)
@@ -64,7 +67,7 @@ func TestProcessorGetsCreatedWithValidConfiguration(t *testing.T) {
 
 func TestFailOnEmptyConfiguration(t *testing.T) {
 	cfg := NewFactory().CreateDefaultConfig()
-	assert.ErrorIs(t, component.ValidateConfig(cfg), errNoTableItems)
+	assert.ErrorIs(t, xconfmap.Validate(cfg), errNoTableItems)
 }
 
 func TestProcessorFailsToBeCreatedWhenRouteHasNoExporters(t *testing.T) {
@@ -78,7 +81,7 @@ func TestProcessorFailsToBeCreatedWhenRouteHasNoExporters(t *testing.T) {
 			},
 		},
 	}
-	assert.ErrorIs(t, component.ValidateConfig(cfg), errNoExporters)
+	assert.ErrorIs(t, xconfmap.Validate(cfg), errNoExporters)
 }
 
 func TestProcessorFailsToBeCreatedWhenNoRoutesExist(t *testing.T) {
@@ -87,7 +90,7 @@ func TestProcessorFailsToBeCreatedWhenNoRoutesExist(t *testing.T) {
 		FromAttribute:    "X-Tenant",
 		Table:            []RoutingTableItem{},
 	}
-	assert.ErrorIs(t, component.ValidateConfig(cfg), errNoTableItems)
+	assert.ErrorIs(t, xconfmap.Validate(cfg), errNoTableItems)
 }
 
 func TestProcessorFailsWithNoFromAttribute(t *testing.T) {
@@ -100,13 +103,13 @@ func TestProcessorFailsWithNoFromAttribute(t *testing.T) {
 			},
 		},
 	}
-	assert.ErrorIs(t, component.ValidateConfig(cfg), errNoMissingFromAttribute)
+	assert.ErrorIs(t, xconfmap.Validate(cfg), errNoMissingFromAttribute)
 }
 
 func TestShouldNotFailWhenNextIsProcessor(t *testing.T) {
 	// prepare
 	factory := NewFactory()
-	creationParams := processortest.NewNopSettings()
+	creationParams := processortest.NewNopSettings(metadata.Type)
 	cfg := &Config{
 		DefaultExporters: []string{"otlp"},
 		FromAttribute:    "X-Tenant",
@@ -119,11 +122,11 @@ func TestShouldNotFailWhenNextIsProcessor(t *testing.T) {
 	}
 	mp := &mockProcessor{}
 
-	next, err := processorhelper.NewTraces(context.Background(), processortest.NewNopSettings(), cfg, consumertest.NewNop(), mp.processTraces)
+	next, err := processorhelper.NewTraces(t.Context(), processortest.NewNopSettings(metadata.Type), cfg, consumertest.NewNop(), mp.processTraces)
 	require.NoError(t, err)
 
 	// test
-	exp, err := factory.CreateTraces(context.Background(), creationParams, cfg, next)
+	exp, err := factory.CreateTraces(t.Context(), creationParams, cfg, next)
 
 	// verify
 	assert.NoError(t, err)
@@ -138,10 +141,10 @@ func TestProcessorDoesNotFailToBuildExportersWithMultiplePipelines(t *testing.T)
 		},
 	}
 
-	otlpTracesExporter, err := otlpExporterFactory.CreateTracesExporter(context.Background(), exportertest.NewNopSettings(), otlpConfig)
+	otlpTracesExporter, err := otlpExporterFactory.CreateTraces(t.Context(), exportertest.NewNopSettings(otlpExporterFactory.Type()), otlpConfig)
 	require.NoError(t, err)
 
-	otlpMetricsExporter, err := otlpExporterFactory.CreateMetricsExporter(context.Background(), exportertest.NewNopSettings(), otlpConfig)
+	otlpMetricsExporter, err := otlpExporterFactory.CreateMetrics(t.Context(), exportertest.NewNopSettings(otlpExporterFactory.Type()), otlpConfig)
 	require.NoError(t, err)
 
 	host := newMockHost(map[pipeline.Signal]map[component.ID]component.Component{
@@ -168,10 +171,10 @@ func TestProcessorDoesNotFailToBuildExportersWithMultiplePipelines(t *testing.T)
 			exp, err := newMetricProcessor(noopTelemetrySettings, cfg)
 			require.NoError(t, err)
 
-			err = exp.Start(context.Background(), host)
+			err = exp.Start(t.Context(), host)
 			// assert that no error is thrown due to multiple pipelines and exporters not using the routing processor
 			assert.NoError(t, err)
-			assert.NoError(t, exp.Shutdown(context.Background()))
+			assert.NoError(t, exp.Shutdown(t.Context()))
 		})
 	}
 }
@@ -179,7 +182,7 @@ func TestProcessorDoesNotFailToBuildExportersWithMultiplePipelines(t *testing.T)
 func TestShutdown(t *testing.T) {
 	// prepare
 	factory := NewFactory()
-	creationParams := processortest.NewNopSettings()
+	creationParams := processortest.NewNopSettings(metadata.Type)
 	cfg := &Config{
 		DefaultExporters: []string{"otlp"},
 		FromAttribute:    "X-Tenant",
@@ -191,12 +194,12 @@ func TestShutdown(t *testing.T) {
 		},
 	}
 
-	exp, err := factory.CreateTraces(context.Background(), creationParams, cfg, consumertest.NewNop())
+	exp, err := factory.CreateTraces(t.Context(), creationParams, cfg, consumertest.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, exp)
 
 	// test
-	err = exp.Shutdown(context.Background())
+	err = exp.Shutdown(t.Context())
 
 	// verify
 	assert.NoError(t, err)
@@ -204,7 +207,7 @@ func TestShutdown(t *testing.T) {
 
 type mockProcessor struct{}
 
-func (mp *mockProcessor) processTraces(context.Context, ptrace.Traces) (ptrace.Traces, error) {
+func (*mockProcessor) processTraces(context.Context, ptrace.Traces) (ptrace.Traces, error) {
 	return ptrace.NewTraces(), nil
 }
 

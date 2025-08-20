@@ -4,7 +4,6 @@
 package mezmoexporter
 
 import (
-	"context"
 	"net/http"
 	"testing"
 	"time"
@@ -26,10 +25,12 @@ func TestType(t *testing.T) {
 	assert.Equal(t, pType, metadata.Type)
 }
 
-var defaultMaxIdleConns = http.DefaultTransport.(*http.Transport).MaxIdleConns
-var defaultMaxIdleConnsPerHost = http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost
-var defaultMaxConnsPerHost = http.DefaultTransport.(*http.Transport).MaxConnsPerHost
-var defaultIdleConnTimeout = http.DefaultTransport.(*http.Transport).IdleConnTimeout
+var (
+	defaultMaxIdleConns        = http.DefaultTransport.(*http.Transport).MaxIdleConns
+	defaultMaxIdleConnsPerHost = http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost
+	defaultMaxConnsPerHost     = http.DefaultTransport.(*http.Transport).MaxConnsPerHost
+	defaultIdleConnTimeout     = http.DefaultTransport.(*http.Transport).IdleConnTimeout
+)
 
 func TestCreateDefaultConfig(t *testing.T) {
 	factory := NewFactory()
@@ -41,11 +42,12 @@ func TestCreateDefaultConfig(t *testing.T) {
 
 		ClientConfig: confighttp.ClientConfig{
 			Timeout:             5 * time.Second,
-			MaxIdleConns:        &defaultMaxIdleConns,
-			MaxIdleConnsPerHost: &defaultMaxIdleConnsPerHost,
-			MaxConnsPerHost:     &defaultMaxConnsPerHost,
-			IdleConnTimeout:     &defaultIdleConnTimeout,
+			MaxIdleConns:        defaultMaxIdleConns,
+			MaxIdleConnsPerHost: defaultMaxIdleConnsPerHost,
+			MaxConnsPerHost:     defaultMaxConnsPerHost,
+			IdleConnTimeout:     defaultIdleConnTimeout,
 			Headers:             map[string]configopaque.String{},
+			ForceAttemptHTTP2:   true,
 		},
 		BackOffConfig: configretry.NewDefaultBackOffConfig(),
 		QueueSettings: exporterhelper.NewDefaultQueueConfig(),
@@ -61,18 +63,18 @@ func TestIngestUrlMustConform(t *testing.T) {
 	assert.Error(t, cfg.Validate(), `"ingest_url" must contain a valid host`)
 }
 
-func TestCreateLogsExporter(t *testing.T) {
+func TestCreateLogs(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	cfg.IngestURL = "https://example.com:8088/otel/ingest/rest"
 	cfg.IngestKey = "1234-1234"
 
-	params := exportertest.NewNopSettings()
-	_, err := createLogsExporter(context.Background(), params, cfg)
+	params := exportertest.NewNopSettings(metadata.Type)
+	_, err := createLogsExporter(t.Context(), params, cfg)
 	assert.NoError(t, err)
 }
 
-func TestCreateLogsExporterNoConfig(t *testing.T) {
-	params := exportertest.NewNopSettings()
-	_, err := createLogsExporter(context.Background(), params, nil)
+func TestCreateLogsNoConfig(t *testing.T) {
+	params := exportertest.NewNopSettings(metadata.Type)
+	_, err := createLogsExporter(t.Context(), params, nil)
 	assert.Error(t, err)
 }

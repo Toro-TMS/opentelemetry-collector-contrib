@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jaegertracing/jaeger/model"
+	"github.com/jaegertracing/jaeger-idl/model/v1"
 	"github.com/klauspost/compress/zstd"
 	splunksapm "github.com/signalfx/sapm-proto/gen"
 	"github.com/signalfx/sapm-proto/sapmprotocol"
@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configoptional"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumererror"
@@ -31,10 +32,10 @@ import (
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	conventions "go.opentelemetry.io/collector/semconv/v1.27.0"
+	conventions "go.opentelemetry.io/otel/semconv/v1.27.0"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/splunk"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sapmreceiver/internal/metadata"
 )
 
 func expectedTraceData(t1, t2, t3 time.Time) ptrace.Traces {
@@ -45,7 +46,7 @@ func expectedTraceData(t1, t2, t3 time.Time) ptrace.Traces {
 
 	traces := ptrace.NewTraces()
 	rs := traces.ResourceSpans().AppendEmpty()
-	rs.Resource().Attributes().PutStr(conventions.AttributeServiceName, "issaTest")
+	rs.Resource().Attributes().PutStr(string(conventions.ServiceNameKey), "issaTest")
 	rs.Resource().Attributes().PutBool("bool", true)
 	rs.Resource().Attributes().PutStr("string", "yes")
 	rs.Resource().Attributes().PutInt("int64", 10000000)
@@ -96,8 +97,8 @@ func grpcFixture(t1 time.Time) *model.Batch {
 				StartTime:     t1,
 				Duration:      10 * time.Minute,
 				Tags: []model.KeyValue{
-					model.String(conventions.AttributeOTelStatusDescription, "Stale indices"),
-					model.String(conventions.AttributeOTelStatusCode, "ERROR"),
+					model.String(string(conventions.OTelStatusDescriptionKey), "Stale indices"),
+					model.String(string(conventions.OTelStatusCodeKey), "ERROR"),
 					model.Bool("error", true),
 				},
 				References: []model.SpanRef{
@@ -115,8 +116,8 @@ func grpcFixture(t1 time.Time) *model.Batch {
 				StartTime:     t1.Add(10 * time.Minute),
 				Duration:      2 * time.Second,
 				Tags: []model.KeyValue{
-					model.String(conventions.AttributeOTelStatusDescription, "Frontend crash"),
-					model.String(conventions.AttributeOTelStatusCode, "ERROR"),
+					model.String(string(conventions.OTelStatusDescriptionKey), "Frontend crash"),
+					model.String(string(conventions.OTelStatusCodeKey), "ERROR"),
 					model.Bool("error", true),
 				},
 			},
@@ -246,17 +247,17 @@ func compressZstd(reqBytes []byte) ([]byte, error) {
 }
 
 func setupReceiver(t *testing.T, config *Config, sink consumer.Traces) receiver.Traces {
-	params := receivertest.NewNopSettings()
+	params := receivertest.NewNopSettings(metadata.Type)
 	sr, err := newReceiver(params, config, sink)
 	assert.NoError(t, err, "should not have failed to create the SAPM receiver")
 	t.Log("Starting")
 
-	require.NoError(t, sr.Start(context.Background(), &nopHost{
+	require.NoError(t, sr.Start(t.Context(), &nopHost{
 		reportFunc: func(event *componentstatus.Event) {
 			require.NoError(t, event.Err())
 		},
 	}), "should not have failed to start trace reception")
-	require.NoError(t, sr.Start(context.Background(), &nopHost{
+	require.NoError(t, sr.Start(t.Context(), &nopHost{
 		reportFunc: func(event *componentstatus.Event) {
 			require.NoError(t, event.Err())
 		},
@@ -318,13 +319,13 @@ func TestReception(t *testing.T) {
 				config: &Config{
 					ServerConfig: confighttp.ServerConfig{
 						Endpoint: tlsAddress,
-						TLSSetting: &configtls.ServerConfig{
+						TLS: configoptional.Some(configtls.ServerConfig{
 							Config: configtls.Config{
 								CAFile:   "./testdata/ca.crt",
 								CertFile: "./testdata/server.crt",
 								KeyFile:  "./testdata/server.key",
 							},
-						},
+						}),
 					},
 				},
 				sapm:        &splunksapm.PostSpansRequest{Batches: []*model.Batch{grpcFixture(now)}},
@@ -336,11 +337,10 @@ func TestReception(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			sink := new(consumertest.TracesSink)
 			sr := setupReceiver(t, tt.args.config, sink)
 			defer func() {
-				require.NoError(t, sr.Shutdown(context.Background()))
+				require.NoError(t, sr.Shutdown(t.Context()))
 			}()
 
 			t.Log("Sending Sapm Request")
@@ -357,79 +357,7 @@ func TestReception(t *testing.T) {
 
 			// compare what we got to what we wanted
 			t.Log("Comparing expected data to trace data")
-			assert.EqualValues(t, tt.want, got[0])
-		})
-	}
-}
-
-func TestAccessTokenPassthrough(t *testing.T) {
-	tests := []struct {
-		name                   string
-		accessTokenPassthrough bool
-		token                  string
-	}{
-		{
-			name:                   "no passthrough and no token",
-			accessTokenPassthrough: false,
-			token:                  "",
-		},
-		{
-			name:                   "no passthrough and token",
-			accessTokenPassthrough: false,
-			token:                  "MyAccessToken",
-		},
-		{
-			name:                   "passthrough and no token",
-			accessTokenPassthrough: true,
-			token:                  "",
-		},
-		{
-			name:                   "passthrough and token",
-			accessTokenPassthrough: true,
-			token:                  "MyAccessToken",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{
-				ServerConfig: confighttp.ServerConfig{
-					Endpoint: "0.0.0.0:7226",
-				},
-				AccessTokenPassthroughConfig: splunk.AccessTokenPassthroughConfig{
-					AccessTokenPassthrough: tt.accessTokenPassthrough,
-				},
-			}
-
-			sapm := &splunksapm.PostSpansRequest{
-				Batches: []*model.Batch{grpcFixture(time.Now().UTC())},
-			}
-
-			sink := new(consumertest.TracesSink)
-			sr := setupReceiver(t, config, sink)
-			defer func() {
-				require.NoError(t, sr.Shutdown(context.Background()))
-			}()
-
-			var resp *http.Response
-			resp, err := sendSapm(config.Endpoint, sapm, "gzip", false, tt.token)
-			require.NoErrorf(t, err, "should not have failed when sending sapm %v", err)
-			assert.Equal(t, 200, resp.StatusCode)
-			assert.NoError(t, resp.Body.Close())
-
-			got := sink.AllTraces()
-			assert.Len(t, got, 1)
-
-			received := got[0].ResourceSpans()
-			for i := 0; i < received.Len(); i++ {
-				rspan := received.At(i)
-				attrs := rspan.Resource().Attributes()
-				amap, contains := attrs.Get("com.splunk.signalfx.access_token")
-				if tt.accessTokenPassthrough && tt.token != "" {
-					assert.Equal(t, tt.token, amap.Str())
-				} else {
-					assert.False(t, contains)
-				}
-			}
+			assert.Equal(t, tt.want, got[0])
 		})
 	}
 }
@@ -444,12 +372,12 @@ func TestStatusCode(t *testing.T) {
 	}{
 		{
 			name:           "non-permanent error",
-			err:            errors.New("non-permanenet error"),
+			err:            errors.New("non-permanent error"),
 			expectedStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:           "permanent error",
-			err:            consumererror.NewPermanent(errors.New("non-permanenet error")),
+			err:            consumererror.NewPermanent(errors.New("non-permanent error")),
 			expectedStatus: http.StatusBadRequest,
 		},
 	}
@@ -468,7 +396,7 @@ func TestStatusCode(t *testing.T) {
 			resp, err := sendSapm(config.Endpoint, sapm, "", false, "")
 			require.NoErrorf(t, err, "should not have failed when sending sapm %v", err)
 			assert.Equal(t, test.expectedStatus, resp.StatusCode)
-			require.NoError(t, sr.Shutdown(context.Background()))
+			require.NoError(t, sr.Shutdown(t.Context()))
 		})
 	}
 }
@@ -479,7 +407,7 @@ type nopHost struct {
 	reportFunc func(event *componentstatus.Event)
 }
 
-func (nh *nopHost) GetExtensions() map[component.ID]component.Component {
+func (*nopHost) GetExtensions() map[component.ID]component.Component {
 	return nil
 }
 

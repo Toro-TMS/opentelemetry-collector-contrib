@@ -40,27 +40,27 @@ func (c Config) Build(set component.TelemetrySettings) (operator.Operator, error
 	return &Input{
 		InputOperator: inputOperator,
 		newCmd: func(ctx context.Context, cursor []byte) cmd {
+			// Copy args and if needed, add the cursor flag
+			journalArgs := append([]string{}, args...)
 			if cursor != nil {
-				args = append(args, "--after-cursor", string(cursor))
+				journalArgs = append(journalArgs, "--after-cursor", string(cursor))
 			}
-			return exec.CommandContext(ctx, "journalctl", args...) // #nosec - ...
+			return exec.CommandContext(ctx, "journalctl", journalArgs...) // #nosec - ...
 			// journalctl is an executable that is required for this operator to function
 		},
-		json: jsoniter.ConfigFastest,
+		convertMessageBytes: c.ConvertMessageBytes,
+		json:                jsoniter.ConfigFastest,
 	}, nil
 }
 
 func (c Config) buildArgs() ([]string, error) {
 	args := make([]string, 0, 10)
 
-	// Export logs in UTC time
-	args = append(args, "--utc")
-
-	// Export logs as JSON
-	args = append(args, "--output=json")
-
-	// Continue watching logs until cancelled
-	args = append(args, "--follow")
+	args = append(args,
+		"--utc",         // Export logs in UTC time
+		"--output=json", // Export logs as JSON
+		"--follow",      // Continue watching logs until cancelled
+	)
 
 	switch c.StartAt {
 	case "end":
@@ -80,12 +80,16 @@ func (c Config) buildArgs() ([]string, error) {
 
 	args = append(args, "--priority", c.Priority)
 
-	if len(c.Grep) > 0 {
+	if c.Grep != "" {
 		args = append(args, "--grep", c.Grep)
 	}
 
 	if c.Dmesg {
 		args = append(args, "--dmesg")
+	}
+
+	if c.Namespace != "" {
+		args = append(args, "--namespace", c.Namespace)
 	}
 
 	switch {

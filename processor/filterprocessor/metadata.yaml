@@ -4,10 +4,10 @@ status:
   class: processor
   stability:
     alpha: [traces, metrics, logs]
-  distributions: [core, contrib]
+  distributions: [core, contrib, k8s]
   warnings: [Orphaned Telemetry, Other]
   codeowners:
-    active: [TylerHelmuth, boostchicken]
+    active: [TylerHelmuth, boostchicken, evan-bradley, edmocosta]
 tests:
   config:
 

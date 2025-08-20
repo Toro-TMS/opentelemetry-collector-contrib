@@ -4,7 +4,6 @@
 package grpc
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configgrpc"
 	"go.opentelemetry.io/collector/config/confignet"
+	"go.opentelemetry.io/collector/pipeline"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -39,8 +39,8 @@ func TestCheck(t *testing.T) {
 		},
 	}
 	var server *Server
-	traces := testhelpers.NewPipelineMetadata("traces")
-	metrics := testhelpers.NewPipelineMetadata("metrics")
+	traces := testhelpers.NewPipelineMetadata(pipeline.SignalTraces)
+	metrics := testhelpers.NewPipelineMetadata(pipeline.SignalMetrics)
 
 	type teststep struct {
 		step           func()
@@ -310,7 +310,7 @@ func TestCheck(t *testing.T) {
 				},
 				{
 					step: func() {
-						// permament error will be ignored
+						// permanent error will be ignored
 						server.aggregator.RecordStatus(
 							metrics.ExporterID,
 							componentstatus.NewPermanentErrorEvent(assert.AnError),
@@ -467,7 +467,7 @@ func TestCheck(t *testing.T) {
 				},
 				{
 					step: func() {
-						// permament error included
+						// permanent error included
 						server.aggregator.RecordStatus(
 							metrics.ExporterID,
 							componentstatus.NewPermanentErrorEvent(assert.AnError),
@@ -698,8 +698,8 @@ func TestCheck(t *testing.T) {
 				componenttest.NewNopTelemetrySettings(),
 				status.NewAggregator(internalhelpers.ErrPriority(tc.componentHealthSettings)),
 			)
-			require.NoError(t, server.Start(context.Background(), componenttest.NewNopHost()))
-			t.Cleanup(func() { require.NoError(t, server.Shutdown(context.Background())) })
+			require.NoError(t, server.Start(t.Context(), componenttest.NewNopHost()))
+			t.Cleanup(func() { require.NoError(t, server.Shutdown(t.Context())) })
 
 			cc, err := grpc.NewClient(
 				addr,
@@ -720,7 +720,7 @@ func TestCheck(t *testing.T) {
 				if ts.eventually {
 					assert.Eventually(t, func() bool {
 						resp, err := client.Check(
-							context.Background(),
+							t.Context(),
 							&healthpb.HealthCheckRequest{Service: ts.service},
 						)
 						require.NoError(t, err)
@@ -730,7 +730,7 @@ func TestCheck(t *testing.T) {
 				}
 
 				resp, err := client.Check(
-					context.Background(),
+					t.Context(),
 					&healthpb.HealthCheckRequest{Service: ts.service},
 				)
 				require.Equal(t, ts.expectedErr, err)
@@ -741,7 +741,6 @@ func TestCheck(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestWatch(t *testing.T) {
@@ -755,8 +754,8 @@ func TestWatch(t *testing.T) {
 		},
 	}
 	var server *Server
-	traces := testhelpers.NewPipelineMetadata("traces")
-	metrics := testhelpers.NewPipelineMetadata("metrics")
+	traces := testhelpers.NewPipelineMetadata(pipeline.SignalTraces)
+	metrics := testhelpers.NewPipelineMetadata(pipeline.SignalMetrics)
 
 	// statusUnchanged is a sentinel value to signal that a step does not result
 	// in a status change. This is important, because checking for a status
@@ -1535,8 +1534,8 @@ func TestWatch(t *testing.T) {
 				componenttest.NewNopTelemetrySettings(),
 				status.NewAggregator(internalhelpers.ErrPriority(tc.componentHealthSettings)),
 			)
-			require.NoError(t, server.Start(context.Background(), componenttest.NewNopHost()))
-			t.Cleanup(func() { require.NoError(t, server.Shutdown(context.Background())) })
+			require.NoError(t, server.Start(t.Context(), componenttest.NewNopHost()))
+			t.Cleanup(func() { require.NoError(t, server.Shutdown(t.Context())) })
 
 			cc, err := grpc.NewClient(
 				addr,
@@ -1562,7 +1561,7 @@ func TestWatch(t *testing.T) {
 				watcher, ok := watchers[ts.service]
 				if !ok {
 					watcher, err = client.Watch(
-						context.Background(),
+						t.Context(),
 						&healthpb.HealthCheckRequest{Service: ts.service},
 					)
 					require.NoError(t, err)
@@ -1580,8 +1579,6 @@ func TestWatch(t *testing.T) {
 			wg.Add(len(watchers))
 
 			for svc, watcher := range watchers {
-				svc := svc
-				watcher := watcher
 				go func() {
 					resp, err := watcher.Recv()
 					// Ensure there are not any unread messages

@@ -4,7 +4,6 @@
 package httpforwarderextension
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -57,7 +56,7 @@ func TestExtension(t *testing.T) {
 				"header": "value",
 			},
 			clientRequestArgs: clientRequestArgs{
-				method: "GET",
+				method: http.MethodGet,
 				url:    fmt.Sprintf("http://%s/api/dosomething", listenAt),
 				headers: map[string]string{
 					"client_header": "val1",
@@ -83,7 +82,7 @@ func TestExtension(t *testing.T) {
 				"header": "value",
 			},
 			clientRequestArgs: clientRequestArgs{
-				method: "PUT",
+				method: http.MethodPut,
 				url:    fmt.Sprintf("http://%s/api/dosomething", listenAt),
 			},
 		},
@@ -123,7 +122,7 @@ func TestExtension(t *testing.T) {
 			expectedBackendResponseBody: []byte("\n"),
 			requestErrorAtForwarder:     true,
 			clientRequestArgs: clientRequestArgs{
-				method: "GET",
+				method: http.MethodGet,
 				url:    fmt.Sprintf("http://%s/api/dosomething", listenAt),
 			},
 		},
@@ -132,7 +131,7 @@ func TestExtension(t *testing.T) {
 			config: &Config{
 				Egress: confighttp.ClientConfig{
 					Endpoint: "localhost:9090",
-					TLSSetting: configtls.ClientConfig{
+					TLS: configtls.ClientConfig{
 						Config: configtls.Config{
 							CAFile: "/non/existent",
 						},
@@ -201,11 +200,11 @@ func TestExtension(t *testing.T) {
 			hf, err := newHTTPForwarder(test.config, componenttest.NewNopTelemetrySettings())
 			require.NoError(t, err)
 
-			ctx := context.Background()
+			ctx := t.Context()
 			if test.startUpError {
 				err = hf.Start(ctx, componenttest.NewNopHost())
 				if test.startUpErrorMessage != "" {
-					require.True(t, strings.Contains(err.Error(), test.startUpErrorMessage))
+					require.Contains(t, err.Error(), test.startUpErrorMessage)
 				}
 				require.Error(t, err)
 
@@ -266,7 +265,7 @@ func readBody(body io.ReadCloser) []byte {
 }
 
 func getParsedURL(t *testing.T, rawURL string) *url.URL {
-	var url, err = url.Parse(rawURL)
+	url, err := url.Parse(rawURL)
 	require.NoError(t, err)
 	return url
 }
